@@ -567,6 +567,10 @@ class MQTTClient:
 # /logs /data /img/cache 没有则创建；
 def IPC_ini():
     try:
+        img_dir = "./img"
+        if not os.path.exists(img_dir):
+            os.makedirs(img_dir)
+            logger.wdlog(f"创建img目录成功")
         getid = create_or_read_id_file()
         if not getid:
             logger.wdlog('user_id.json创建或读取失败！程序退出。')
