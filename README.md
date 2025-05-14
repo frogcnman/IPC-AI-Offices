@@ -21,10 +21,22 @@
 2. 安装依赖：`pip install -r requirements.txt`
 3. 下载模型文件到data目录
 
-## 使用方法
+## 从Git获取项目
 
-1. 配置config.json和xconfig.json
-2. 运行：`bash run.sh`
+
+# 克隆项目
+git clone https://github.com/frogcnman/IPC-AI-Offices.git
+cd IPC-AI-Offices
+# 构建并启动容器
+docker-compose up -d
+
+# 使用方法
+docker 下正常运行后，访问 ，访问配置接口 http://IP:8000 即可访问监控设备配置页面，页面会自动刷新局域网中所有支持ONVIF协议的IPC设备，这里你需要配置监控设备的账号和密码，即可自动获取监控设备的RTSP视频流地址，保存后即配置完成了局域网中的监控设备；
+
+# 系统使用说明
+使用手机打开微信，搜索“海知微科技”公众号，关注后进入公众号，通过“设备配置”-“+添加网关”，扫描 前面配置页面上的二维码，即可完成设备的配置，可配置“设备名称”。
+通过公众号 “慧眼主页”进入系统首页后即可查看监控设备的信息；
+说明：当前系统的使用场景配置为企业商用；
 
 ## 目录结构
 
