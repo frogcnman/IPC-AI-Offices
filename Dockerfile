@@ -15,13 +15,10 @@ RUN apt-get update && apt-get install -y \
     libxrender-dev \
     net-tools \
     iputils-ping \
-    # 安装H264编码器相关依赖
-    RUN apt-get update && apt-get install -y \
-        x264 \
-        libx264-dev \
-        ffmpeg \
-        && apt-get clean \
-        && rm -rf /var/lib/apt/lists/*
+    x264 \
+    libx264-dev \
+    ffmpeg \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # 安装依赖
