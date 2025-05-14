@@ -1,0 +1,11 @@
+version: '3'
+
+services:
+  ipc-web:
+    build: .
+    network_mode: "host"  # 使用主机网络模式
+    volumes:
+      - .:/app           # 将当前目录映射到容器的/app目录
+      - ./config:/app/config
+      - ./logs:/app/logs
+    restart: unless-stopped

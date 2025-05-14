@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>慧眼监控设备配置</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        /* 基础样式 */
+        body { 
+            max-width: 100%; 
+            margin: 0 auto; 
+            padding: 10px;
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+        }
+        
+        h1 {
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .modal-content {
+            position: relative;
+            background-color: #fff;
+            margin: 15% auto;
+            padding: 20px;
+            width: 90%;
+            max-width: 500px;
+            border-radius: 8px;
+        }
+        
+        .close-btn {
+            position: absolute;
+            right: 10px;
+            top: 10px;
+            font-size: 24px;
+            cursor: pointer;
+        }
+        
+        /* 移动端适配 */
+        @media screen and (max-width: 768px) {
+            .section {
+                padding: 10px;
+                margin: 10px 0;
+            }
+            
+            .device-list th, .device-list td {
+                padding: 2px;
+                font-size: 12px;
+            }
+            
+            button {
+                padding: 6px 12px;
+                font-size: 12px;
+            }
+            
+            h1 {
+                font-size: 20px;
+            }
+            
+            h2 {
+                font-size: 18px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>慧眼监控设备配置</h1>   
+    <div class="section">
+        <h2>设备列表</h2>
+        <div class="action-buttons">
+            <button onclick="scanDevices()" class="scan-btn">扫描设备</button>
+        </div>
+        <div class="table-container">
+            <table class="device-list" id="devices-list">
+                <thead>
+                    <tr>
+                        <th>序号</th>
+                        <th>设备名称</th>
+                        <th>IP地址</th>
+                        <th>端口</th>
+                        <th>状态</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
+        </div>
+        <div class="bottom-actions">
+            <button onclick="saveAllDevices()" class="save-all-btn">保存所有配置</button>
+        </div>
+    </div>
+    <!-- 添加二维码显示区域 -->
+    <div class="qrcode-section">
+        <img id="qrcode" src="{{ url_for('static', filename='qrcode.png') }}" alt="设备二维码">
+        <button onclick="saveQRCode()" class="qrcode-btn">保存设备码</button>
+    </div>
+    
+    <!-- 添加二维码相关样式 -->
+    <style>
+        .qrcode-section {
+            text-align: center;
+            margin: 20px auto;
+            max-width: 300px;
+        }
+        
+        #qrcode {
+            width: 200px;
+            height: 200px;
+            margin: 10px auto;
+            display: block;
+        }
+        
+        .qrcode-btn {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            margin-top: 10px;
+        }
+    </style>
+    
+    <!-- 添加保存二维码的脚本 -->
+    <script>
+        function saveQRCode() {
+            // 创建一个临时的a标签用于下载
+            const link = document.createElement('a');
+            link.href = document.getElementById('qrcode').src;
+            link.download = 'device_qrcode.png';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+    <!-- 添加新的样式 -->
+    <style>
+        .action-buttons {
+            text-align: center;
+            padding: 10px 20px;
+            margin: 0 auto;
+        }
+
+        .scan-btn {
+            width: 100%;
+            max-width: 800px;
+            padding: 12px 0;
+            margin: 0 auto;
+            display: block;
+        }
+
+        .bottom-actions {
+            margin: 20px 20px;
+            text-align: center;
+        }
+        
+        .save-all-btn {
+            background-color: var(--success-color);
+            padding: 12px 0;
+            font-size: 16px;
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto;
+            display: block;
+        }
+    </style>
+
+    <div id="config-form" class="config-form"></div>
+
+    <script>
+        let deviceStatuses = {};
+        let deviceNames = {};
+
+        // 页面加载时读取已保存的设备信息
+        async function loadSavedDevices() {
+            try {
+                const response = await fetch('/api/get_saved_devices');
+                const data = await response.json();
+                if (data.status === 'success') {
+                    data.devices.forEach(device => {
+                        deviceStatuses[device.ip] = '配置成功';
+                        deviceNames[device.ip] = device.dev_name || `IPC_${device.ip}`;
+                    });
+                }
+            } catch (e) {
+                console.error('加载已保存设备失败:', e);
+            }
+        }
+
+        // 页面加载完成后执行
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSavedDevices();
+            scanDevices(); // 自动扫描设备
+        });
+
+        async function scanDevices() {
+            const scanButton = document.querySelector('.scan-btn');
+            scanButton.disabled = true;
+            scanButton.style.backgroundColor = '#ccc';
+            scanButton.style.cursor = 'not-allowed';
+            
+            const tbody = document.querySelector('#devices-list tbody');
+            tbody.innerHTML = '<tr><td colspan="6">扫描中，请稍等...</td></tr>';
+            
+            try {
+                const response = await fetch('/api/scan_devices');
+                const data = await response.json();
+                if (data.status === 'success') {
+                    tbody.innerHTML = '';
+                    data.devices.forEach((device, index) => {
+                        const status = device.rtsp_url1 ? '配置成功' : '未配置';
+                        deviceStatuses[device.ip] = status;
+                        deviceNames[device.ip] = device.dev_name;
+                        deviceRtspUrls[device.ip] = device.rtsp_url1;  // 保存RTSP URL
+                        
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td>${index + 1}</td>
+                            <td id="name-${device.ip}">${device.dev_name || `IPC_${device.ip}`}</td>
+                            <td><i class="fas fa-network-wired"></i> ${device.ip}</td>
+                            <td><i class="fas fa-plug"></i> ${device.port}</td>
+                            <td id="status-${device.ip}">
+                                <span class="${status === '配置成功' ? 'status-success' : 'error'}">
+                                    <!-- ${status}-->
+                                </span>
+                            </td>
+                            <td>
+                                <button onclick="configDevice('${device.ip}', ${device.port})" 
+                                        ${status === '配置成功' ? 'class="configured"' : ''}>
+                                    ${status === '配置成功' ? '重新配置' : '配置'}
+                                </button>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="6" class="error">${data.message}</td></tr>`;
+                }
+            } catch (e) {
+                tbody.innerHTML = `<tr><td colspan="6" class="error">扫描失败: ${e}</td></tr>`;
+            } finally {
+                // 恢复按钮状态
+                scanButton.disabled = false;
+                scanButton.style.backgroundColor = 'var(--primary-color)';
+                scanButton.style.cursor = 'pointer';
+            }
+        }
+
+        function configDevice(ip, port) {
+            const form = document.getElementById('config-form');
+            form.style.display = 'block';
+            form.innerHTML = `
+                <h3>配置设备 ${ip}:${port}</h3>
+                <div class="form-group">
+                    <label>用户名：</label>
+                    <input type="text" id="username" value="admin">
+                </div>
+                <div class="form-group">
+                    <label>密码：</label>
+                    <input type="password" id="password">
+                </div>
+                <button onclick="getRTSP('${ip}', ${port})">获取RTSP</button>
+                <div id="rtsp-result"></div>
+            `;
+            form.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        async function getRTSP(ip, port) {
+            const result = document.getElementById('rtsp-result');
+            const statusCell = document.getElementById(`status-${ip}`);
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            result.innerHTML = '获取中...';
+            statusCell.innerHTML = '配置中...';
+            
+            try {
+                const response = await fetch('/api/get_rtsp', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        ip: ip,
+                        port: parseInt(port),
+                        username: username,
+                        password: password 
+                    })
+                });
+                const data = await response.json();
+                if (data.status === 'success') {
+                    const rtspInfo = data.info.IPC[0];
+                    deviceStatuses[ip] = '配置成功';
+                    deviceNames[ip] = rtspInfo.dev_name || '未知设备';
+                    statusCell.innerHTML = '<span class="status-success"></span>';
+                    const nameCell = document.getElementById(`name-${ip}`);
+                    if (nameCell) {
+                        nameCell.innerHTML = `
+                            <input type="text" class="device-name-input" value="${deviceNames[ip]}" id="name-input-${ip}">
+                            <button class="save-name-btn" onclick="saveDeviceName('${ip}')">保存</button>
+                        `;
+                    }
+                    result.innerHTML = `
+                        <p class="success">配置成功！</p>
+                        <p>设备名称: ${rtspInfo.dev_name || '未知'}</p>
+                        <p>主码流: ${rtspInfo.rtsp_url1 || '未知'}</p>
+                        <p>子码流: ${rtspInfo.rtsp_url2 || '未知'}</p>
+                    `;
+                } else {
+                    statusCell.innerHTML = '<span class="error"></span>';
+                    result.innerHTML = `<span class="error">错误: ${data.message}</span>`;
+                }
+            } catch (e) {
+                statusCell.innerHTML = '<span class="error"></span>';
+                result.innerHTML = `<span class="error">获取失败: ${e}</span>`;
+            }
+        }
+
+        async function saveDeviceName(ip) {
+            const input = document.getElementById(`name-input-${ip}`);
+            const newName = input.value.trim();
+            if (newName) {
+                try {
+                    // 获取当前设备的RTSP URL
+                    const rtspUrl = deviceRtspUrls[ip] || '';
+                    
+                    const response = await fetch('/api/save_device_name', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            ip: ip,
+                            dev_name: newName,
+                            rtsp_url1: rtspUrl
+                        })
+                    });
+                    const data = await response.json();
+                    if (data.status === 'success') {
+                        deviceNames[ip] = newName;
+                        const nameCell = document.getElementById(`name-${ip}`);
+                        nameCell.innerHTML = newName;
+                    } else {
+                        alert('保存设备名称失败：' + data.message);
+                    }
+                } catch (e) {
+                    console.error('保存设备名称失败:', e);
+                    alert('保存设备名称失败：' + e.message);
+                }
+            }
+        }
+
+        async function saveAllDevices() {
+            try {
+                const devices = [];
+                const rows = document.querySelectorAll('#devices-list tbody tr');
+                
+                rows.forEach(row => {
+                    const ip = row.querySelector('td:nth-child(3)').textContent.trim()
+                        .replace(/\s+/g, '')
+                        .replace(/\s*<i.*?<\/i>\s*/, '');
+                    const statusCell = document.getElementById(`status-${ip}`);
+                    
+                    // 检查状态是否为绿点（成功配置）
+                    if (statusCell && statusCell.querySelector('.status-success')) {
+                        const port = parseInt(row.querySelector('td:nth-child(4)').textContent.trim()
+                            .replace(/\s*<i.*?<\/i>\s*/, '')) || 80;
+                        const deviceName = row.querySelector('td:nth-child(2)').textContent.trim();
+                        
+                        const device = {
+                            dev_name: deviceName,
+                            ip: ip,
+                            port: port,
+                            rtsp_url1: deviceRtspUrls[ip] || '',
+                            rtsp_url2: ''
+                        };
+                        
+                        // 只添加有效的设备信息
+                        if (device.dev_name && device.ip && device.rtsp_url1) {
+                            devices.push(device);
+                        }
+                    }
+                });
+        
+                if (devices.length === 0) {
+                    alert('没有找到已配置的设备！');
+                    return;
+                }
+        
+                const response = await fetch('/api/save_all_devices', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ devices })
+                });
+        
+                const result = await response.json();
+                if (result.status !== 'success') {
+                    throw new Error(result.message || '保存失败');
+                }
+                
+                alert('所有设备配置保存成功！系统重启中，请稍后...');
+            } catch (e) {
+                console.error('保存设备配置失败:', e);
+                alert('保存失败：' + e.message);
+            }
+        }
+
+        // 添加全局变量用于存储RTSP URL
+        let deviceRtspUrls = {};
+
+        // 修改 getRTSP 函数，在成功时保存RTSP URL
+        async function getRTSP(ip, port) {
+            const configResult = document.getElementById('configResult');
+            const statusCell = document.getElementById(`status-${ip}`);
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const deviceName = document.getElementById('deviceName').value;
+            
+            if (!deviceName.trim()) {
+                configResult.innerHTML = '<span class="error">请输入设备名称</span>';
+                return;
+            }
+            
+            configResult.innerHTML = '配置中...';
+            statusCell.innerHTML = '配置中...';
+            
+            try {
+                const response = await fetch('/api/get_rtsp', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        ip: ip,
+                        port: parseInt(port),
+                        username: username,
+                        password: password,
+                        dev_name: deviceName
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('网络请求失败');
+                }
+                
+                const data = await response.json();
+                
+                if (data.status === 'success' && data.info) {
+                    let rtspInfo;
+                    if (Array.isArray(data.info)) {
+                        rtspInfo = data.info[0];
+                    } else if (data.info.IPC && Array.isArray(data.info.IPC)) {
+                        rtspInfo = data.info.IPC[0];
+                    }
+
+                    // 更新设备信息
+                    deviceRtspUrls[ip] = rtspInfo.rtsp_url1 || '';
+                    deviceStatuses[ip] = '配置成功';
+                    deviceNames[ip] = deviceName;
+                    
+                    // 更新设备列表中的状态和名称
+                    statusCell.innerHTML = '<span class="status-success"></span>';
+                    const nameCell = document.getElementById(`name-${ip}`);
+                    if (nameCell) {
+                        nameCell.textContent = deviceName;
+                    }
+                    
+                    // 只显示成功信息
+                    configResult.innerHTML = '<p class="success">配置成功！</p>';
+                    
+                    // 延迟关闭弹出层
+                    setTimeout(closeModal, 1500);
+                } else {
+                    let errorMsg = data.message || '获取RTSP信息失败';
+                    if (errorMsg.includes('device is locked')) {
+                        errorMsg = '设备已被锁定，由于多次输入错误的用户名/密码。请30分钟后再试！';
+                    } else if (errorMsg.includes('wrong username/password')) {
+                        errorMsg = '用户名或密码错误';
+                        document.getElementById('password').value = '';
+                    }
+                    
+                    statusCell.innerHTML = '<span class="error"></span>';
+                    configResult.innerHTML = `<span class="error">错误: ${errorMsg}</span>`;
+                }
+            } catch (e) {
+                console.error('获取RTSP失败:', e);
+                statusCell.innerHTML = '<span class="error"></span>';
+                configResult.innerHTML = '<span class="error">连接失败，请检查设备是否在线</span>';
+            }
+        }
+    </script>
+
+    <!-- 添加弹出层 -->
+    <style>
+        /* 基础样式 */
+        :root {
+            --primary-color: #007AFF;
+            --success-color: #34C759;
+            --error-color: #FF3B30;
+            --background-color: #F2F2F7;
+            --card-background: #FFFFFF;
+            --text-primary: #000000;
+            --text-secondary: #8E8E93;
+        }
+    
+        body { 
+            max-width: 100%; 
+            margin: 0;
+            padding: 6px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-primary);
+            -webkit-font-smoothing: antialiased;
+        }
+    
+        h1, h2 {
+            font-weight: 600;
+            margin: 0;
+            padding: 16px 0;
+        }
+    
+        .section {
+            background: var(--card-background);
+            border-radius: 12px;
+            padding: 4px;
+            margin: 16px 0;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+    
+        /* 按钮样式 */
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            /* padding: 12px 20px; */
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+    
+        button:hover {
+            opacity: 0.9;
+        }
+    
+        .save-all-btn {
+            background-color: var(--success-color);
+        }
+    
+        /* 表格样式 */
+        /* 响应式表格 */
+        .device-list {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin-top: 16px;
+            /* table-layout: fixed; 固定表格布局 */
+            overflow-x: auto; /* 在小屏幕上允许水平滚动 */
+        }
+        
+        .device-list th {
+            /* padding: 12px 16px; */
+            text-align: center;
+            border-bottom: 1px solid #E5E5EA;
+            white-space: nowrap; /* 防止文本换行 */
+            overflow: hidden; /* 隐藏溢出内容 */
+            text-overflow: ellipsis; /* 显示省略号 */
+        }
+        .device-list td {
+            /* padding: 12px 16px; */
+            text-align: center;
+            border-bottom: 1px solid #E5E5EA;
+            /*white-space: nowrap;*/ /* 防止文本换行 */
+            overflow: hidden; /* 隐藏溢出内容 */
+            text-overflow: ellipsis; /* 显示省略号 */
+        }
+        
+        /* 设置各列宽度比例 */
+      
+        
+        /* 在小屏幕上的表格容器 */
+        @media screen and (max-width: 768px) {
+            .table-container {
+                overflow-x: auto;
+                width: 100%;
+            }
+        }
+    
+        .device-list th {
+            font-weight: 600;
+            color: var(--text-secondary);
+            background-color: #F9F9F9;
+        }
+    
+        /* 弹出层样式 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            z-index: 1000;
+            backdrop-filter: blur(5px);
+        }
+    
+        .modal-content {
+            position: relative;
+            background-color: var(--card-background);
+            margin: 10% auto;
+            padding: 24px;
+            width: 90%;
+            max-width: 400px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        }
+    
+        .close-btn {
+            position: absolute;
+            right: 20px;
+            top: 20px;
+            font-size: 24px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            line-height: 1;
+        }
+    
+        /* 表单样式 */
+        .form-group {
+            margin-bottom: 20px;
+            display: grid;
+            grid-template-columns: 100px 1fr;
+            align-items: center;
+            gap: 16px;
+        }
+    
+        .form-group label {
+            color: var(--text-primary);
+            font-weight: 500;
+            text-align: right;
+        }
+    
+        .form-group input {
+            padding: 10px 12px;
+            border: 1px solid #E5E5EA;
+            border-radius: 8px;
+            font-size: 15px;
+            width: 100%;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+    
+        .form-group input:focus {
+            border-color: var(--primary-color);
+            outline: none;
+        }
+    
+        /* 状态样式 */
+        .status-success {
+            color: var(--success-color);
+            border-radius: 50%;
+            width: 10px;
+            background-color: #34c759 !important;
+            display: inline-block;
+            height: 10px;
+            text-align: center;
+        }
+    
+        .error {
+            color: var(--error-color);
+            border-radius: 50%;
+            width: 10px;
+            background-color: #ff3b30 !important;
+            display: inline-block;
+            height: 10px;
+            text-align: center;
+        }
+    
+        #configResult {
+            margin-top: 16px;
+            text-align: center;
+            font-weight: 500;
+        }
+    
+        /* 移动端适配 */
+        @media screen and (max-width: 768px) {
+            body {
+                padding: 6px;
+            }
+    
+            .form-group {
+                grid-template-columns: 1fr;
+                gap: 8px;
+            }
+    
+            .form-group label {
+                text-align: left;
+            }
+    
+            .modal-content {
+                margin: 20% auto;
+                padding: 20px;
+            }
+        }
+    </style>
+    
+    <!-- 修改弹出层结构 -->
+    <div id="configModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeModal()">&times;</span>
+            <h2>配置设备</h2>
+            <div class="form-group">
+                <label>设备名称</label>
+                <input type="text" id="deviceName" placeholder="请输入设备名称">
+            </div>
+            <div class="form-group">
+                <label>用户名</label>
+                <input type="text" id="username" value="admin" placeholder="请输入用户名">
+            </div>
+            <div class="form-group">
+                <label>密码</label>
+                <input type="password" id="password" placeholder="请输入密码">
+            </div>
+            <button id="submitConfig" style="width: 100%;padding: 16px 0px;">获取RTSP</button>
+            <div id="configResult"></div>
+        </div>
+    </div>
+
+    <script>
+        // 修改配置设备函数
+        function configDevice(ip, port) {
+            const modal = document.getElementById('configModal');
+            const submitBtn = document.getElementById('submitConfig');
+            const deviceNameInput = document.getElementById('deviceName');
+            const usernameInput = document.getElementById('username');
+            const passwordInput = document.getElementById('password');
+            const configResult = document.getElementById('configResult');
+            
+            // 重置表单
+            deviceNameInput.value = deviceNames[ip] || `IPC_${ip}`;
+            usernameInput.value = 'admin';
+            passwordInput.value = '';
+            configResult.innerHTML = '';
+            
+            modal.style.display = 'block';
+            
+            // 清除之前的事件监听
+            submitBtn.onclick = null;
+            
+            // 添加新的事件监听
+            submitBtn.onclick = () => getRTSP(ip, port);
+        }
+
+        // 关闭弹出层
+        function closeModal() {
+            document.getElementById('configModal').style.display = 'none';
+        }
+
+        // 修改 getRTSP 函数，添加设备名称参数
+        // 删除第一个 getRTSP 函数，只保留最后一个完整版本
+        async function getRTSP(ip, port) {
+    const configResult = document.getElementById('configResult');
+    const statusCell = document.getElementById(`status-${ip}`);
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+    const deviceName = document.getElementById('deviceName').value;
+    
+    if (!deviceName.trim()) {
+        configResult.innerHTML = '<span class="error">请输入设备名称</span>';
+        return;
+    }
+    
+    configResult.innerHTML = '配置中...';
+    statusCell.innerHTML = '配置中...';
+    
+    try {
+        const response = await fetch('/api/get_rtsp', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ 
+                ip: ip,
+                port: parseInt(port),
+                username: username,
+                password: password,
+                dev_name: deviceName
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error('网络请求失败');
+        }
+        
+        const data = await response.json();
+        
+        if (data.status === 'success' && data.info) {
+            let rtspInfo;
+            if (Array.isArray(data.info)) {
+                rtspInfo = data.info[0];
+            } else if (data.info.IPC && Array.isArray(data.info.IPC)) {
+                rtspInfo = data.info.IPC[0];
+            }
+
+            // 更新设备信息
+            deviceRtspUrls[ip] = rtspInfo.rtsp_url1 || '';
+            deviceStatuses[ip] = '配置成功';
+            deviceNames[ip] = deviceName;
+            
+            // 更新设备列表中的状态和名称
+            statusCell.innerHTML = '<span class="status-success"></span>';
+            const nameCell = document.getElementById(`name-${ip}`);
+            if (nameCell) {
+                nameCell.textContent = deviceName;
+            }
+            
+            // 只显示成功信息
+            configResult.innerHTML = '<p class="success">配置成功！</p>';
+            
+            // 延迟关闭弹出层
+            setTimeout(closeModal, 1500);
+        } else {
+            let errorMsg = data.message || '获取RTSP信息失败';
+            if (errorMsg.includes('device is locked')) {
+                errorMsg = '设备已被锁定，由于多次输入错误的用户名/密码。请30分钟后再试！';
+            } else if (errorMsg.includes('wrong username/password')) {
+                errorMsg = '用户名或密码错误';
+                document.getElementById('password').value = '';
+            }
+            
+            statusCell.innerHTML = '<span class="error">配置失败</span>';
+            configResult.innerHTML = `<span class="error">错误: ${errorMsg}</span>`;
+        }
+    } catch (e) {
+        console.error('获取RTSP失败:', e);
+        statusCell.innerHTML = '<span class="error">配置失败</span>';
+        configResult.innerHTML = '<span class="error">连接失败，请检查设备是否在线</span>';
+    }
+}
+    </script>
+</body>
+</html>

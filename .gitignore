@@ -1,0 +1,7 @@
+*.pyc
+__pycache__/
+img/
+logs/
+models/
+.env
+config/*.json
