@@ -1,7 +1,5 @@
 *.pyc
 __pycache__/
-img/
-logs/
-models/
+data/
 .env
 config/*.json
