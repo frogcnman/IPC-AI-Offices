@@ -30,6 +30,15 @@
 # 构建并启动容器
 - docker-compose up -d
 
+## 更新已经拉取的项目
+# 先用Docker Compose停止容器
+docker-compose down
+# 用Git拉取最新代码 
+# 进入项目目录
+cd IPC-AI-Offices
+# 拉取最新代码   
+git pull origin main
+
 # 使用方法
 docker 下正常运行后，访问 ，访问配置接口 http://IP:8000 即可访问监控设备配置页面，页面会自动刷新局域网中所有支持ONVIF协议的IPC设备，这里你需要配置监控设备的账号和密码，即可自动获取监控设备的RTSP视频流地址，保存后即配置完成了局域网中的监控设备；
 
